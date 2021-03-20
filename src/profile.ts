@@ -3,6 +3,7 @@ import { querySelectorPromise, querySelectorAllPromise } from "./util/promise-ut
 import { getJSON } from "./util/api-util";
 import { formatDate } from "./util/text-util";
 import { DEVELOPERS } from "./types/names";
+import { getCSRF } from "./util/cookie-util";
 import {getKAID} from "./util/data-util";
 
 async function addUserInfo (uok: UsernameOrKaid): Promise<void> {
@@ -65,26 +66,32 @@ async function addUserInfo (uok: UsernameOrKaid): Promise<void> {
 			}
 
 			if (User.kaid === getKAID()) {
-				getJSON(`${window.location.origin}/api/v1/user`, {"discussion_banned":1}).then((data: User) => {
-					//If something messes up I don't want to accidentally tell someone they're banned
-					if (!data.hasOwnProperty("discussion_banned")) {
-						throw new Error("Error loading ban information.");
-					}else {
-						let bannedHTML = `<tr><td class="user-statistics-label">Banned</td>`;
-
-						if (data.discussion_banned === false) {
-							bannedHTML += `<td>No</td>`;
-						}else if (data.discussion_banned === true) {
-							bannedHTML += `<td style="color: red">Discussion banned</td>`;
-						}else {
+				fetch(`${window.location.origin}/api/internal/graphql/getFullUserProfile`, {
+					method: "POST",
+					headers: { "X-KA-FKey": getCSRF(), 'Accept': 'application/json', 'Content-Type': 'application/json'},
+					body: JSON.stringify({"operationName":"getFullUserProfile","variables":{},"query":"query getFullUserProfile($kaid: String, $username: String) {\n  user(kaid: $kaid, username: $username) {\n    id\n    kaid\n    key\n    userId\n    email\n    username\n    profileRoot\n    gaUserId\n    qualarooId\n    isPhantom\n    isDeveloper: hasPermission(name: \"can_do_what_only_admins_can_do\")\n    isCurator: hasPermission(name: \"can_curate_tags\", scope: ANY_ON_CURRENT_LOCALE)\n    isCreator: hasPermission(name: \"has_creator_role\", scope: ANY_ON_CURRENT_LOCALE)\n    isPublisher: hasPermission(name: \"can_publish\", scope: ANY_ON_CURRENT_LOCALE)\n    isModerator: hasPermission(name: \"can_moderate_users\", scope: GLOBAL)\n    isParent\n    isSatStudent\n    isTeacher\n    isDataCollectible\n    isChild\n    isOrphan\n    isCoachingLoggedInUser\n    canModifyCoaches\n    nickname\n    hideVisual\n    joined\n    points\n    countVideosCompleted\n    publicBadges {\n      badgeCategory\n      description\n      isOwned\n      isRetired\n      name\n      points\n      absoluteUrl\n      hideContext\n      icons {\n        smallUrl\n        compactUrl\n        emailUrl\n        largeUrl\n        __typename\n      }\n      relativeUrl\n      safeExtendedDescription\n      slug\n      translatedDescription\n      translatedSafeExtendedDescription\n      __typename\n    }\n    bio\n    background {\n      name\n      imageSrc\n      __typename\n    }\n    soundOn\n    muteVideos\n    prefersReducedMotion\n    noColorInVideos\n    autocontinueOn\n    avatar {\n      name\n      imageSrc\n      __typename\n    }\n    hasChangedAvatar\n    newNotificationCount\n    canHellban: hasPermission(name: \"can_ban_users\", scope: GLOBAL)\n    canMessageUsers: hasPermission(name: \"can_send_moderator_messages\", scope: GLOBAL)\n    discussionBanned\n    isSelf: isActor\n    hasStudents: hasCoachees\n    hasClasses\n    hasChildren\n    hasCoach\n    badgeCounts\n    homepageUrl\n    isMidsignupPhantom\n    includesDistrictOwnedData\n    preferredKaLocale {\n      id\n      kaLocale\n      status\n      __typename\n    }\n    underAgeGate {\n      parentEmail\n      daysUntilCutoff\n      approvalGivenAt\n      __typename\n    }\n    authEmails\n    signupDataIfUnverified {\n      email\n      emailBounced\n      __typename\n    }\n    pendingEmailVerifications {\n      email\n      unverifiedAuthEmailToken\n      __typename\n    }\n    tosAccepted\n    shouldShowAgeCheck\n    __typename\n  }\n  actorIsImpersonatingUser\n}\n"}),
+					credentials: "same-origin"
+				}).then((response: Response): void => {
+					response.json().then((res: { data?: any }): void => {
+						if (!res.data.user.hasOwnProperty("discussionBanned")) {
 							throw new Error("Error loading ban information.");
-						}
+						}else {
+							let bannedHTML = `<tr><td class="user-statistics-label">Banned</td>`;
 
-						const lastTR = table.querySelector("tr:last-of-type");
-						if (!lastTR) { throw new Error("Table has no tr"); }
-						lastTR.outerHTML = bannedHTML + `</tr>` + lastTR.outerHTML;
-					}
-				});
+							if (res.data.user.discussionBanned === null) {
+								bannedHTML += `<td>No</td>`;
+							}else if (res.data.user.discussionBanned === true) {
+								bannedHTML += `<td style="color: red">Discussion banned</td>`;
+							}else {
+								throw new Error("Error loading ban information.");
+							}
+
+							const lastTR = table.querySelector("tr:last-of-type");
+							if (!lastTR) { throw new Error("Table has no tr"); }
+							lastTR.outerHTML = bannedHTML + `</tr>` + lastTR.outerHTML;
+						}
+					});
+				}).catch(console.error);
 			}
 		});
 
